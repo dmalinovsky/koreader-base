@@ -1,12 +1,13 @@
 local ffi = require("ffi")
 local BB = require("ffi/blitbuffer")
 local inkview = ffi.load("inkview")
+local util = require("ffi/util")
 
 require("ffi/inkview_h")
 require("ffi/linux_fb_h")
 
 local framebuffer = {
-    _is_saturated = false,
+    _last_saturation_secs = 0,
 }
 
 local function _getPhysicalRect(fb, x, y, w, h)
@@ -16,11 +17,12 @@ local function _getPhysicalRect(fb, x, y, w, h)
 end
 
 local function _adjustAreaColours(fb)
-    if fb.device.hasColorScreen() and not fb._is_saturated then
+    local sec, usec = util.gettime()
+    if fb.device.hasColorScreen() and sec - 2 > fb._last_saturation_secs then
         fb.debug("adjusting image color saturation")
 
         inkview.adjustAreaDefault(fb.data, fb._finfo.line_length, fb._vinfo.width, fb._vinfo.height)
-        fb._is_saturated = true
+        fb._last_saturation_secs = sec
     end
 end
 
@@ -36,7 +38,6 @@ local function _updatePartial(fb, x, y, w, h, dither, hq)
 
     if fb.device.hasColorScreen() and hq then
         inkview.PartialUpdateHQ(x, y, w, h)
-        fb._is_saturated = false
     else
         inkview.PartialUpdate(x, y, w, h)
     end
@@ -51,7 +52,6 @@ local function _updateFull(fb, x, y, w, h, dither)
 
     if fb.device.hasColorScreen() then
         inkview.FullUpdateHQ()
-        fb._is_saturated = false
     else
         inkview.FullUpdate()
     end
@@ -100,6 +100,7 @@ function framebuffer:init()
     self.native_rotation_mode = self.forced_rotation and self.forced_rotation.default or self.DEVICE_ROTATED_UPRIGHT
     self.cur_rotation_mode = self.native_rotation_mode
 
+    self._last_saturation_secs = 0
 
     self.debug("FB info (post fixup)", {
         fb_size = self.fb_size,
