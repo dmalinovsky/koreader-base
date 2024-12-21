@@ -6,7 +6,7 @@ require("ffi/inkview_h")
 require("ffi/linux_fb_h")
 
 local framebuffer = {
-
+    _is_saturated = false,
 }
 
 local function _getPhysicalRect(fb, x, y, w, h)
@@ -16,10 +16,11 @@ local function _getPhysicalRect(fb, x, y, w, h)
 end
 
 local function _adjustAreaColours(fb)
-    if fb.device.hasColorScreen() then
+    if fb.device.hasColorScreen() and not fb._is_saturated then
         fb.debug("adjusting image color saturation")
 
         inkview.adjustAreaDefault(fb.data, fb._finfo.line_length, fb._vinfo.width, fb._vinfo.height)
+        fb._is_saturated = true
     end
 end
 
@@ -158,6 +159,10 @@ function framebuffer:refreshWaitForLastImp()
         inkview.WaitForUpdateComplete()
         self.dont_wait_for_marker = self.marker
     end
+end
+
+function framebuffer:afterPaint()
+    self._is_saturated = false
 end
 
 return require("ffi/framebuffer_linux"):extend(framebuffer)
