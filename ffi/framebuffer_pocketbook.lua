@@ -36,6 +36,7 @@ local function _updatePartial(fb, x, y, w, h, dither, hq)
 
     if fb.device.hasColorScreen() and hq then
         inkview.PartialUpdateHQ(x, y, w, h)
+        fb._is_saturated = false
     else
         inkview.PartialUpdate(x, y, w, h)
     end
@@ -50,6 +51,7 @@ local function _updateFull(fb, x, y, w, h, dither)
 
     if fb.device.hasColorScreen() then
         inkview.FullUpdateHQ()
+        fb._is_saturated = false
     else
         inkview.FullUpdate()
     end
@@ -159,10 +161,6 @@ function framebuffer:refreshWaitForLastImp()
         inkview.WaitForUpdateComplete()
         self.dont_wait_for_marker = self.marker
     end
-end
-
-function framebuffer:afterPaint()
-    self._is_saturated = false
 end
 
 return require("ffi/framebuffer_linux"):extend(framebuffer)
