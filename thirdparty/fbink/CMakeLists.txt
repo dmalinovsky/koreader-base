@@ -32,8 +32,13 @@ else()
     #set(INPUT_TARGET inputlib LINUX=1)
 endif()
 
+list(APPEND PATCH_FILES cdecl_c99_type_begone.patch new_ffi-cdecl.patch)
+
 list(APPEND BUILD_CMD COMMAND make CROSS_TC=${CHOST})
 append_autotools_vars(BUILD_CMD)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND BUILD_CMD DEBUG=1)
+endif()
 
 if(TOOL STREQUAL "fbdepth")
     list(APPEND BUILD_CMD ${FBDEPTH_TARGET})
@@ -56,8 +61,9 @@ else()
 endif()
 
 external_project(
-    DOWNLOAD GIT 4404f2e6ae8bfa37c4ab603db0abbe5cd203ce97
+    DOWNLOAD GIT 92e127008145b2a22fba7c59815d810d716310dd
     https://github.com/NiLuJe/FBInk.git
+    PATCH_FILES ${PATCH_FILES}
     BUILD_COMMAND ${BUILD_CMD}
     INSTALL_COMMAND ${INSTALL_CMD}
 )

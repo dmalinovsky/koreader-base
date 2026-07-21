@@ -1,7 +1,8 @@
 diff --git a/include/mupdf/fitz/archive.h b/include/mupdf/fitz/archive.h
+index b135b5f23..29d3d16b8 100644
 --- a/include/mupdf/fitz/archive.h
 +++ b/include/mupdf/fitz/archive.h
-@@ -314,6 +314,9 @@ fz_archive *fz_open_zip_archive(fz_context *ctx, const char *path);
+@@ -315,6 +315,9 @@ fz_archive *fz_open_zip_archive(fz_context *ctx, const char *path);
  */
  fz_archive *fz_open_zip_archive_with_stream(fz_context *ctx, fz_stream *file);
  
@@ -9,9 +10,10 @@ diff --git a/include/mupdf/fitz/archive.h b/include/mupdf/fitz/archive.h
 +int fz_archive_authenticate_password(fz_context *ctx, fz_archive *zip, const char *password);
 +
  /**
- 	fz_zip_writer offers methods for creating and writing zip files.
- 	It can be seen as the reverse of the fz_archive zip
+ 	Open a zip archive from static data.
+ */
 diff --git a/source/cbz/mucbz.c b/source/cbz/mucbz.c
+index 6d1b1b242..e2f99530a 100644
 --- a/source/cbz/mucbz.c
 +++ b/source/cbz/mucbz.c
 @@ -266,6 +266,20 @@ cbz_load_page(fz_context *ctx, fz_document *doc_, int chapter, int number)
@@ -35,7 +37,7 @@ diff --git a/source/cbz/mucbz.c b/source/cbz/mucbz.c
  static int
  cbz_lookup_metadata(fz_context *ctx, fz_document *doc_, const char *key, char *buf, size_t size)
  {
-@@ -284,6 +298,8 @@ cbz_open_document(fz_context *ctx, fz_stream *file, fz_stream *accel, fz_archive
+@@ -284,6 +298,8 @@ cbz_open_document(fz_context *ctx, const fz_document_handler *handler, fz_stream
  	doc->super.count_pages = cbz_count_pages;
  	doc->super.load_page = cbz_load_page;
  	doc->super.lookup_metadata = cbz_lookup_metadata;
@@ -45,21 +47,16 @@ diff --git a/source/cbz/mucbz.c b/source/cbz/mucbz.c
  	fz_try(ctx)
  	{
 diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
+index 62507d316..6949c383d 100644
 --- a/source/fitz/unzip.c
 +++ b/source/fitz/unzip.c
-@@ -43,10 +43,33 @@
+@@ -43,10 +43,27 @@
  
  #define ZIP_ENCRYPTED_FLAG 0x1
  
 +#ifdef HAVE_LIBAES
-+/*
-+ * Note that the original crypt.h in minizip uses unsigned long pointer to
-+ * pcrc_32_tab it will cause problem on x86_64 machine. While the crypt.h
-+ * in zlib-1.2.8 contrib minizip uses z_crc_t pointer which is determined
-+ * to unsigned int pointer on 64 bit machine.
-+ */
-+#include "contrib/minizip/crypt.h"  // from zlib-1.2.8
-+#include "aes/fileenc.h"            // from minizip-g0b46a2b
++#include "contrib/minizip/crypt.h"
++#include "aes/fileenc.h"
 +#define AES_METHOD          (99)
 +#define AES_PWVERIFYSIZE    (2)
 +#define AES_MAXSALTLENGTH   (16)
@@ -89,8 +86,8 @@ diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
 +#ifdef HAVE_LIBAES
 +	int crypted;
 +	char password[128];
-+	unsigned long keys[3];     /* keys defining the pseudo-random sequence */
-+	const z_crc_t *pcrc_32_tab;
++	uint32_t keys[3];     /* keys defining the pseudo-random sequence */
++	const uint32_t *pcrc_32_tab;
 +	unsigned long aes_encryption_mode;
 +	unsigned long aes_compression_method;
 +	unsigned long aes_version;
@@ -115,15 +112,16 @@ diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
  			zip->count++;
  		}
  	}
-@@ -435,6 +478,12 @@ static int read_zip_entry_header(fz_context *ctx, fz_zip_archive *zip, zip_entry
+@@ -435,6 +478,13 @@ static int read_zip_entry_header(fz_context *ctx, fz_zip_archive *zip, zip_entry
  	fz_stream *file = zip->super.file;
  	uint32_t sig;
  	int general, method, namelength, extralength;
-+	int crc32, modtime;
++	uint32_t crc32;
++	uint16_t modtime;
 +#ifdef HAVE_LIBAES
 +	int i, headerid, datasize, chk;
 +	unsigned char source[12];
-+	unsigned char crcbyte;
++	uint8_t crcbyte;
 +#endif
  
  	fz_seek(ctx, file, ent->offset, 0);
@@ -184,7 +182,7 @@ diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
 +			}
 +		} else {
 +			fz_seek(ctx, file, extralength, 1);
-+			zip->pcrc_32_tab = (const z_crc_t*)get_crc_table();
++			zip->pcrc_32_tab = (const uint32_t*)get_crc_table();
 +			init_keys(zip->password, zip->keys, zip->pcrc_32_tab);
 +			fz_read(ctx, file, source, 12);
 +			for (i = 0; i < 12; i++) {
@@ -241,7 +239,7 @@ diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
 +				if (zip->aes_encryption_mode) {
 +					fcrypt_decrypt(ubuf->data, ent->usize, &zip->aes_ctx);
 +				} else {
-+					int i;
++					unsigned i;
 +					for(i = 0; i < ent->usize; ++i)
 +						ubuf->data[i] = zdecode(zip->keys, zip->pcrc_32_tab, ubuf->data[i]);
 +				}
@@ -259,7 +257,7 @@ diff --git a/source/fitz/unzip.c b/source/fitz/unzip.c
 +				if (zip->aes_encryption_mode) {
 +					fcrypt_decrypt(cbuf, ent->csize, &zip->aes_ctx);
 +				} else {
-+					int i;
++					unsigned i;
 +					for(i = 0; i < ent->csize; ++i) {
 +						cbuf[i] = zdecode(zip->keys, zip->pcrc_32_tab, cbuf[i]);
 +					}

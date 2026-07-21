@@ -12,7 +12,6 @@ list(APPEND CFG_CMD
     ${SOURCE_DIR}/configure --host=${CHOST}
     --disable-etc-default-login
     --disable-lastlog
-    --with-md5-passwords
     --without-hardening
     --without-openssl
     --without-stackprotect
@@ -26,9 +25,9 @@ list(APPEND BUILD_CMD COMMAND make ${PROGRAMS})
 append_binary_install_command(INSTALL_CMD ${PROGRAMS})
 
 external_project(
-    DOWNLOAD URL 5e90def5af3ffb27e149ca6fff12bef3
-    https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-9.6p1.tar.gz
-    https://mirror.edgecast.com/pub/OpenBSD/OpenSSH/portable/openssh-9.6p1.tar.gz
+    DOWNLOAD URL c5fb91ded926b38e8956074cac2cd44f
+    https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.4p1.tar.gz
+    https://cloudflare.cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.4p1.tar.gz
     CONFIGURE_COMMAND ${CFG_CMD}
     BUILD_COMMAND ${BUILD_CMD}
     INSTALL_COMMAND ${INSTALL_CMD}

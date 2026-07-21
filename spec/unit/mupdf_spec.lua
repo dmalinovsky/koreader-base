@@ -7,6 +7,7 @@ local simple_pdf_annotated_compare = "spec/base/unit/data/simple-out-annotated.p
 local simple_pdf_annotation_deleted_compare = "spec/base/unit/data/simple-out-annotation-deleted.pdf"
 local test_img = "spec/base/unit/data/sample.jpg"
 local jbig2_pdf = "spec/base/unit/data/2col.jbig2.pdf"
+local saturation_test_pdf = "spec/base/unit/data/saturation.pdf"
 local aes_encrypted_zip = "spec/base/unit/data/encrypted-aes.zip"
 local none_encrypted_zip = "spec/base/unit/data/encrypted-none.zip"
 local plain_encrypted_zip = "spec/base/unit/data/encrypted-plain.zip"
@@ -121,33 +122,33 @@ describe("mupdf module", function()
             assert.is_not_nil(page)
             page:addMarkupAnnotation(annotation_quadpoints, 1, ffi.C.PDF_ANNOT_HIGHLIGHT)
             page:close()
-            local tmp_pdf = os.tmpname()
-            doc:writeDocument(tmp_pdf)
+            local out_pdf = os.getenv("KO_HOME") .. "/simple-out.pdf"
+            doc:writeDocument(out_pdf)
             doc:close()
             assert.is_equal(
-                md5.sumFile(tmp_pdf),
+                md5.sumFile(out_pdf),
                 md5.sumFile(simple_pdf_compare)
             )
-            os.remove(tmp_pdf)
+            os.remove(out_pdf)
         end)
         it("should open a page, add an annotation, delete it again, and write a new document", function()
             local doc = M.openDocument(simple_pdf)
             assert.is_not_nil(doc)
             local page = doc:openPage(1)
             assert.is_not_nil(page)
-            local tmp_pdf = os.tmpname()
-            doc:writeDocument(tmp_pdf)
+            local out_pdf = os.getenv("KO_HOME") .. "/simple-out-annotation-deleted.pdf"
+            doc:writeDocument(out_pdf)
             page:addMarkupAnnotation(annotation_quadpoints, 1, ffi.C.PDF_ANNOT_HIGHLIGHT)
             local annot = page:getMarkupAnnotation(annotation_quadpoints, 1)
-            page:deleteMarkupAnnotation(annot)
+            page:deleteAnnotation(annot)
             page:close()
-            doc:writeDocument(tmp_pdf)
+            doc:writeDocument(out_pdf)
             doc:close()
             assert.is_equal(
-                md5.sumFile(tmp_pdf),
+                md5.sumFile(out_pdf),
                 md5.sumFile(simple_pdf_annotation_deleted_compare)
             )
-            os.remove(tmp_pdf)
+            os.remove(out_pdf)
         end)
         it("should open a page, add contents to an existing annotation and write a new document", function()
             local doc = M.openDocument(simple_pdf_compare)
@@ -157,14 +158,14 @@ describe("mupdf module", function()
             local annot = page:getMarkupAnnotation(annotation_quadpoints, 1)
             page:updateMarkupAnnotation(annot, "annotation contents")
             page:close()
-            local tmp_pdf = os.tmpname()
-            doc:writeDocument(tmp_pdf)
+            local out_pdf = os.getenv("KO_HOME") .. "/simple-out-annotated.pdf"
+            doc:writeDocument(out_pdf)
             doc:close()
             assert.is_equal(
-                md5.sumFile(tmp_pdf),
+                md5.sumFile(out_pdf),
                 md5.sumFile(simple_pdf_annotated_compare)
             )
-            os.remove(tmp_pdf)
+            os.remove(out_pdf)
         end)
 
         describe("PDF page API", function()
@@ -222,11 +223,44 @@ describe("mupdf module", function()
             end)
         end)
     end)
+
     describe("image API", function()
         it("should render an image", function()
             local img = M.renderImageFile(test_img)
             assert.is_not_nil(img)
             img:free()
         end)
+    end)
+
+    it("should adjust saturation", function()
+        local BB = require("ffi/blitbuffer")
+        local doc = M.openDocument(saturation_test_pdf)
+        assert.is_not_nil(doc)
+        doc:setColorRendering(true)
+        local page = doc:openPage(1)
+        local dc = require("ffi/drawcontext").new()
+        local bb = BB.new(800, 600, BB.TYPE_BBRGB24)
+        page:draw(dc, bb, 0, 0)
+        local original = bb:getPixel(50, 50):getColorRGB24()
+        dc:setSaturation(1.6)
+        page:draw(dc, bb, 0, 0)
+        local saturated = bb:getPixel(50, 50):getColorRGB24()
+        assert.True(original ~= saturated)
+        doc:close()
+    end)
+
+    it("should open document from text", function()
+        local doc = M.openDocumentFromText([[
+        <html>
+          <head>
+            <title>Testing</title>
+          </head>
+          <body>
+            <h1>Header</h1>
+            <p>Lorem ipsum.</p>
+          <hr>
+          </body>
+        </html>]], "html", "spec/base/unit/data")
+        doc:close()
     end)
 end)

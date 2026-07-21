@@ -1,8 +1,3 @@
-if(ANDROID)
-    # Use `limits.h` instead of `stdint.h`.
-    list(APPEND PATCH_CMD COMMAND ${ISED} "s|stdint.h|limits.h|g" openbsd-reallocarray.c)
-endif()
-
 list(APPEND CMAKE_ARGS
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
     -DBUILD_SHARED_LIBS=$<NOT:$<BOOL:${MONOLIBTIC}>>
@@ -17,8 +12,8 @@ if(NOT MONOLIBTIC)
 endif()
 
 external_project(
-    DOWNLOAD URL 913dd251492134e235ee3c9a91987a4d
-    https://sourceforge.net/projects/giflib/files/giflib-5.2.2.tar.gz
+    DOWNLOAD URL a70e90ff780e9ebee9cb84b82bbd46a7
+    https://sourceforge.net/projects/giflib/files/giflib-6.x/giflib-6.1.3.tar.gz
     PATCH_OVERLAY overlay
     PATCH_COMMAND ${PATCH_CMD}
     CMAKE_ARGS ${CMAKE_ARGS}

@@ -1,8 +1,13 @@
-local ffi = require("ffi")
+-- Automatically generated with ffi-cdecl.
 
-ffi.cdef[[
-long unsigned int compressBound(long unsigned int);
-int compress2(unsigned char *, long unsigned int *, const unsigned char *, long unsigned int, int);
-long unsigned int crc32(long unsigned int, const unsigned char *, unsigned int);
-int uncompress(unsigned char *, long unsigned int *, const unsigned char *, long unsigned int);
+require("ffi").cdef[[
+typedef unsigned char Byte;
+typedef Byte Bytef;
+typedef unsigned long uLong;
+typedef uLong uLongf;
+typedef unsigned uInt;
+uLong compressBound(uLong);
+int compress2(Bytef *, uLongf *, const Bytef *, uLong, int);
+uLong crc32(uLong, const Bytef *, uInt);
+int uncompress(Bytef *, uLongf *, const Bytef *, uLong);
 ]]

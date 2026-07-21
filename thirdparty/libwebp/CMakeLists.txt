@@ -19,6 +19,7 @@ list(APPEND CMAKE_ARGS
     -DWEBP_BUILD_VWEBP=FALSE
     -DWEBP_BUILD_WEBPINFO=FALSE
     -DWEBP_BUILD_WEBPMUX=FALSE
+    -DWEBP_ENABLE_SIMD=$<BOOL:${WANT_SIMD}>
 )
 
 list(APPEND BUILD_CMD COMMAND ninja)
@@ -32,8 +33,8 @@ if(NOT MONOLIBTIC)
 endif()
 
 external_project(
-    DOWNLOAD URL 34869086761c0e2da6361035f7b64771
-    https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.2.tar.gz
+    DOWNLOAD URL cceb6447180f961473b181c9ef38b630
+    https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz
     PATCH_FILES ${PATCH_FILES}
     CMAKE_ARGS ${CMAKE_ARGS}
     BUILD_COMMAND ${BUILD_CMD}

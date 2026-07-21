@@ -19,20 +19,26 @@ list(APPEND PATCH_FILES
     relink_on_xlibs_change.patch
     # Fix symbols visiblity.
     visibility.patch
-    # Expand list of supported CSS color names.
-    css_color_names.patch
+    # Backport addition of `passthrough` member to `fz_device` (from b20077eb2).
+    passthrough_device.patch
 )
 
+# Remove unnecessary vendored thirdparty libraries.
 list(APPEND PATCH_CMD COMMAND rm -rf
+    thirdparty/brotli
     thirdparty/curl
     thirdparty/freeglut
     thirdparty/freetype
     thirdparty/harfbuzz
     thirdparty/leptonica
     thirdparty/libjpeg
-    thirdparty/mujs
+    # NOTE: We need to keep the mujs source around even though support is
+    # disabled because `regexp.c` is directly included by `fitz/regexp.c`.
+    # thirdparty/mujs
     thirdparty/tesseract
+    thirdparty/zint
     thirdparty/zlib
+    thirdparty/zxing-cpp
 )
 
 string(TOLOWER ${CMAKE_BUILD_TYPE} MUPDF_BUILD_TYPE)
@@ -50,13 +56,13 @@ string(APPEND XCFLAGS
     " ${CFLAGS} -fvisibility=hidden"
     # Disable a couple of things to save a small bit of space:
     # - builtin fonts
-    # - color profile support
     # - CMYK plotter only 100 kB
-    # - javascript (for form data validation) close to 800 kB
+    # - hyphenation (~700 kB)
     " -DNOBUILTINFONT"
-    " -DFZ_ENABLE_JS=0"
+    " -DFZ_ENABLE_HYPHEN=0"
     " -DFZ_PLOTTERS_CMYK=0"
     " -DHAVE_LIBAES=1"
+    " -DHAVE_LIBARCHIVE=1"
     " -DHAVE_WEBP=1"
 )
 if(ANDROID AND CHOST MATCHES "^armv7a-.*")
@@ -73,6 +79,12 @@ set(MAKE_CMD
     CXX=${CXX}
     LDFLAGS=
     XCFLAGS=${XCFLAGS}
+    USE_ARGUMENT_FILE=no
+    # Disable some features.
+    barcode=no
+    brotli=no
+    mujs=no
+    tesseract=no
     # Disable some vendored libraries:
     # - curl
     USE_SYSTEM_CURL=yes
@@ -85,12 +97,13 @@ set(MAKE_CMD
     USE_SYSTEM_HARFBUZZ=yes
     SYS_HARFBUZZ_CFLAGS=-I${STAGING_DIR}/include/harfbuzz
     SYS_HARFBUZZ_LIBS=
+    # - libarchive
+    USE_SYSTEM_LIBARCHIVE=yes
+    SYS_LIBARCHIVE_CFLAGS=-I${STAGING_DIR}/include
+    SYS_LIBARCHIVE_LIBS=
     # - libjpeg
     USE_SYSTEM_LIBJPEG=yes
     SYS_LIBJPEG_LIBS=
-    # - mujs
-    MUJS_CFLAGS=
-    MUJS_SRC=
     # - zlib
     USE_SYSTEM_ZLIB=yes
     SYS_ZLIB_CFLAGS=-I${STAGING_DIR}/include
@@ -110,8 +123,9 @@ list(APPEND BUILD_CMD COMMAND ${MAKE_CMD} libs)
 list(APPEND INSTALL_CMD COMMAND ${MAKE_CMD} DESTDIR=${STAGING_DIR} prefix=/ install-libs)
 
 external_project(
-    DOWNLOAD URL 7f02c87260948160e2e21f9685bdcda0
-    https://mupdf.com/downloads/archive/mupdf-1.24.11-source.tar.lz
+    DOWNLOAD URL 17169f89d135a9cb0de147690f982c88
+    https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/1.27.2/mupdf-1.27.2-source.tar.lz
+    https://mupdf.com/downloads/archive/mupdf-1.27.2-source.tar.lz
     PATCH_FILES ${PATCH_FILES}
     PATCH_COMMAND ${PATCH_CMD}
     BUILD_COMMAND ${BUILD_CMD}

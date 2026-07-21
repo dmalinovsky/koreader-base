@@ -80,10 +80,11 @@ download_archive() { (
     if validate_md5 "${dest}" "${md5}"; then
         return 0
     fi
+    mkdir -p "${dest%/*}"
     for timeout in 0 2 4; do
         sleep ${timeout}
         for url in "$@"; do
-            if curl --fail --location --connect-timeout 10 --create-dirs --max-time 30 --retry 3 --output "${dest}" "${url}" && validate_md5 "${dest}" "${md5}"; then
+            if @WGET_COMMAND@ --connect-timeout=15 --dns-timeout=10 --read-timeout=10 --tries=1 --output-document="${dest}" "${url}" && validate_md5 "${dest}" "${md5}"; then
                 return 0
             fi
         done
@@ -99,20 +100,28 @@ extract_archive() { (
     # Of course `cmake -E tar` does not support `--strip-components=n`,
     # so we need to use a temporary directory and move things around…
     rm -rf "${sourcedir}" "${sourcedir}.tmp" || return 1
-    case "${archive}" in
-        *.src.rock)
-            # Luarocks source rock, there's no need to extract it.
-            return 0
-            ;;
-    esac
     mkdir "${sourcedir}.tmp" || return 1
     oldpwd="${PWD}"
     cd "${sourcedir}.tmp"
-    '@CMAKE_COMMAND@' -E tar xf "${archive}"
-    root="$(echo *)"
+    '@CMAKE_COMMAND@' -E tar xf "${archive}" || return 1
+    case "${archive}" in
+        # Luarocks source rock, no root dir.
+        *.src.rock) root='' ;;
+        # Ditto for wheel.
+        *.whl) root='' ;;
+        *)
+            root="$(echo *)"
+            if ! [ -e "${root}" ]; then
+                # Multiple entries: no root.
+                root=''
+            fi
+            ;;
+    esac
     cd "${oldpwd}"
     mv "${sourcedir}.tmp/${root}" "${sourcedir}"
-    rmdir "${sourcedir}.tmp"
+    if [ -d "${sourcedir}.tmp" ]; then
+        rmdir "${sourcedir}.tmp"
+    fi
 ); }
 
 apply_patches() { (
@@ -129,8 +138,8 @@ clean_tree() { (
     srclist="$2"
     shift 2
     # shellcheck disable=SC2030
-    export LANG=C
-    killlist="$(list_tree "${tree}" | comm -13 "${srclist}" -)"
+    export LC_ALL=C
+    killlist="$(list_tree "${tree}" | comm -13 "${srclist}" - | tac)"
     [ -n "${killlist}" ] || return 0
     # Remove files.
     sed -n '/\/$/!p' <<EOF | xargs --delimiter='\n' --no-run-if-empty rm -v || return 1
@@ -151,7 +160,7 @@ list_tree() { (
         shift
     fi
     # shellcheck disable=SC2031
-    export LANG=C
+    export LC_ALL=C
     find "${tree}" -type d \( -name '.git' -prune -o -printf '%p/\n' \) -o -printf '%p\n' | sort
 ); }
 
@@ -178,7 +187,7 @@ clone_git_repo() { (
     clone_depth=50
     mkdir -p "${repo%/*}"
     (
-        flock -n 9
+        flock 9
         # Try the clone 3 times in case there is an odd git clone issue.
         error=1
         for timeout in 0 2 4; do
@@ -244,7 +253,7 @@ checkout_git_repo() { (
     revision="$3"
     shift 3
     rm -rf "${tree}" || return 1
-    (flock -n 9 && cp -a "${repo}" "${tree}") 9>"${repo}.lock" || return 1
+    (flock 9 && cp -a "${repo}" "${tree}") 9>"${repo}.lock" || return 1
     # Same as above in `checkout_git_repo`.
     # shellcheck disable=SC2031
     export GIT_DIR="${tree}/.git"
@@ -257,11 +266,12 @@ checkout_git_repo() { (
 
 make() { (
     set +u
+    # Strip outer make overrides to avoid messing-up a thirdparty
+    # project build (e.g. fbink `INSTALL_DIR` makefile variable).
     unset MAKEOVERRIDES
     MAKEFLAGS="${MAKEFLAGS%% -- *}"
     export MAKEFLAGS
-    # shellcheck disable=2086
-    exec '@MAKE@' ${PARALLEL_JOBS:+-j}${PARALLEL_JOBS} ${PARALLEL_LOAD:+-l}${PARALLEL_LOAD} "$@"
+    exec '@MAKE@' "$@"
 ); }
 
 ninja() { (

@@ -1,16 +1,15 @@
-// CPPFLAGS="-I../koreader-base/ -I/var/tmp/niluje/libk2pdfopt/k2pdfoptlib -I/var/tmp/niluje/libk2pdfopt -I/var/tmp/niluje/libk2pdfopt/willuslib -I/var/tmp/niluje/libk2pdfopt/include_mod -I/var/tmp/niluje/leptonica/src -I/usr/include/luajit-2.0"
-//#include "alltypes.h"
-#include "koptcontext.h"
-#include "koptreflow.h"
+#define K2PDFOPT_EXPORT
+#define WILLUS_EXPORT
+
 #include "koptcrop.h"
 #include "koptimize.h"
-// For bitmap2pix... sigh.
-#include "koptocr.c"
-
-#include "ffi-cdecl.h"
+#include "koptocr.h"
+#include "koptreflow.h"
 
 cdecl_type(BBox)
 cdecl_type(BOXA)
+cdecl_type(K2PAGEBREAKMARK)
+cdecl_type(K2PAGEBREAKMARKS)
 cdecl_type(NUMA)
 cdecl_type(PIX)
 cdecl_type(POINT2D)

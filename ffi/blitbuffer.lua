@@ -124,6 +124,7 @@ void BB_blend_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, uns
 void BB_blend_RGB32_over_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, const ColorRGB32 * restrict color);
 void BB_blend_RGB_multiply_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, const ColorRGB24 * restrict color);
 void BB_blend_RGB32_multiply_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, const ColorRGB32 * restrict color);
+void BB_saturate_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, double saturation);
 void BB_invert_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h);
 void BB_hatch_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, unsigned int stripe_width, const Color8 * restrict color, uint8_t alpha);
 void BB_blit_to(const BlitBuffer * restrict source, BlitBuffer * restrict dest, unsigned int dest_x, unsigned int dest_y,
@@ -1657,6 +1658,39 @@ function BB4_mt.__index:invertRect(x, y, w, h)
     self:invertblitFrom(self, x, y, x, y, w, h)
 end
 
+function BB_mt.__index:adjustSaturation(saturation)
+    saturation = saturation or 1.0
+    if saturation == 1.0 then
+        return
+    end
+    saturation = math.max(0.0, math.min(saturation, 2.0))
+
+    local bbtype = self:getType()
+    if bbtype == TYPE_BB8 or bbtype == TYPE_BB8A or bbtype == TYPE_BB4 then
+        return
+    end
+
+    if self:canUseCbb() then
+        cblitbuffer.BB_saturate_rect(ffi.cast(P_BlitBuffer, self), 0, 0, self:getWidth(), self:getHeight(), saturation)
+        return
+    end
+
+    -- TODO: optimize this function
+    for y = 0, self:getHeight() - 1 do
+        for x = 0, self:getWidth() - 1 do
+            local color = self:getPixel(x, y):getColorRGB32()
+            local gray = rshift(4898 * color.r + 9618 * color.g + 1869 * color.b, 14)
+            local r = gray + (color.r - gray) * saturation
+            local g = gray + (color.g - gray) * saturation
+            local b = gray + (color.b - gray) * saturation
+            if r < 0 then r = 0 elseif r > 255 then r = 255 end
+            if g < 0 then g = 0 elseif g > 255 then g = 255 end
+            if b < 0 then b = 0 elseif b > 255 then b = 255 end
+            self:setPixel(x, y, ColorRGB32(r + 0.5, g + 0.5, b + 0.5, color.alpha))
+        end
+    end
+end
+
 --[[
 paint a rectangle onto this buffer
 
@@ -1926,7 +1960,7 @@ function BB_mt.__index:paintCircle(center_x, center_y, r, c, w)
     local r2 = r - w
     local x2 = 0
     local y2 = r2
-    local delta2 = 5/4 - r
+    local delta2 = 5/4 - r2
 
     -- draw two axles
     for tmp_y = r, r2+1, -1 do
@@ -1985,7 +2019,8 @@ function BB_mt.__index:paintRoundedCorner(off_x, off_y, w, h, bw, r, c, anti_ali
         return
     end
 
-    if self:canUseCbb() then
+    if ffi.istype(Color8, c) and self:canUseCbb() then
+        -- @todo RGB32 support in cblitbuffer.BB_paint_rounded_corner
         cblitbuffer.BB_paint_rounded_corner(ffi.cast(P_BlitBuffer, self),
             off_x, off_y, w, h, bw, r, c:getColor8().a, anti_alias or 0)
     else
@@ -2004,7 +2039,7 @@ function BB_mt.__index:paintRoundedCorner(off_x, off_y, w, h, bw, r, c, anti_ali
         local r2 = r - bw
         local x2 = 0
         local y2 = r2
-        local delta2 = 5/4 - r
+        local delta2 = 5/4 - r2
 
         while x < y do
             -- decrease y if we are out of circle
@@ -2078,6 +2113,28 @@ function BB_mt.__index:paintBorder(x, y, w, h, bw, c, r, anti_alias)
 end
 
 --[[
+paintBorder variant that uses ColorRGB32 instead of a luminance value
+--]]
+function BB_mt.__index:paintBorderRGB32(x, y, w, h, bw, c, r, anti_alias)
+    x, y = ceil(x), ceil(y)
+    h, w = ceil(h), ceil(w)
+    if not r or r == 0 then
+        self:paintRectRGB32(x, y, w, bw, c)
+        self:paintRectRGB32(x, y+h-bw, w, bw, c)
+        self:paintRectRGB32(x, y+bw, bw, h-2*bw, c)
+        self:paintRectRGB32(x+w-bw, y+bw, bw, h-2*bw, c)
+    else
+        if h < 2*r then r = floor(h/2) end
+        if w < 2*r then r = floor(w/2) end
+        self:paintRoundedCorner(x, y, w, h, bw, r, c, anti_alias or 0)
+        self:paintRectRGB32(r+x, y, w-2*r, bw, c)
+        self:paintRectRGB32(r+x, y+h-bw, w-2*r, bw, c)
+        self:paintRectRGB32(x, r+y, bw, h-2*r, c)
+        self:paintRectRGB32(x+w-bw, r+y, bw, h-2*r, c)
+    end
+end
+
+--[[
 Draw an inner border
 
 @x:  start position in x axis
@@ -2122,6 +2179,21 @@ function BB_mt.__index:paintRoundedRect(x, y, w, h, c, r)
     end
 end
 
+--[[
+paintRoundedRect variant that uses ColorRGB32 instead of a luminance value
+--]]
+function BB_mt.__index:paintRoundedRectRGB32(x, y, w, h, c, r)
+    x, y = ceil(x), ceil(y)
+    h, w = ceil(h), ceil(w)
+    if not r or r == 0 then
+        self:paintRectRGB32(x, y, w, h, c)
+    else
+        if h < 2*r then r = floor(h/2) end
+        if w < 2*r then r = floor(w/2) end
+        self:paintBorderRGB32(x, y, w, h, r, c, r)
+        self:paintRectRGB32(x+r, y+r, w-2*r, h-2*r, c)
+    end
+end
 
 --[[
 Paint hatches in a rectangle
@@ -2420,28 +2492,38 @@ end
 local Jpeg -- lazy load ffi/jpeg
 
 function BB_mt.__index:getBufferData()
-    local w, h = self:getWidth(), self:getHeight()
-    local bbdump, source_ptr, stride
-    if self:getType() == TYPE_BBRGB24 then
-        source_ptr = ffi.cast(uint8pt, self.data)
-        stride = self.stride
+    local n
+    local bbdump
+    local bbtype = self:getType()
+    if bbtype == TYPE_BBRGB32 then
+        bbdump = self
+        n = 4
+    elseif bbtype == TYPE_BBRGB24 then
+        bbdump = self
+        n = 3
     else
-        bbdump = BB.new(w, h, TYPE_BBRGB24, nil)
+        bbdump = BB.new(self.w, self.h, TYPE_BBRGB24, nil)
         bbdump:blitFrom(self)
-        source_ptr = ffi.cast(uint8pt, bbdump.data)
-        stride = bbdump.stride
+        n = 3
     end
-    return bbdump, source_ptr, w, stride, h
+    return bbdump, n
 end
 
 function BB_mt.__index:writeBMP(filename, grayscale)
     if not Jpeg then Jpeg = require("ffi/jpeg") end
 
-    local bbdump, source_ptr, w, stride, h = self:getBufferData()
+    local bbdump, n
+    if grayscale then
+        bbdump = BB.new(self.w, self.h, TYPE_BB8)
+        bbdump:blitFrom(self)
+        n = 1
+    else
+        bbdump, n = self:getBufferData()
+   end
 
-    Jpeg.writeBMP(filename, source_ptr, w, stride, h, grayscale)
+    Jpeg.writeBMP(filename, ffi.cast(uint8pt, bbdump.data), bbdump.w, bbdump.h, n, bbdump.stride)
 
-    if bbdump then
+    if bbdump ~= self then
         bbdump:free()
     end
 end
@@ -2449,11 +2531,11 @@ end
 function BB_mt.__index:writeJPG(filename, quality)
     if not Jpeg then Jpeg = require("ffi/jpeg") end
 
-    local bbdump, source_ptr, w, stride, h = self:getBufferData()
+    local bbdump, n = self:getBufferData()
 
-    Jpeg.encodeToFile(filename, source_ptr, w, stride, h, quality) -- Colortype default, subsample default
+    Jpeg.encodeToFile(filename, ffi.cast(uint8pt, bbdump.data), bbdump.w, bbdump.h, n, quality, bbdump.stride)
 
-    if bbdump then
+    if bbdump ~= self then
         bbdump:free()
     end
 end

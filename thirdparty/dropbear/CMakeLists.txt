@@ -42,6 +42,7 @@ list(APPEND PATCH_FILES
     nopasswd-hack.patch
     pubkey-hack.patch
     reduce_build_verbosity.patch
+    fix__GNU_SOURCE_warnings.patch
 )
 
 if(ANDROID)
@@ -64,6 +65,12 @@ list(APPEND CFG_CMD
 )
 list(APPEND CFG_CMD COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_BINARY_DIR}/localoptions.h localoptions.h)
 
+if(KINDLE OR POCKETBOOK)
+    # Some kindles / pocketbooks don't have `libcrypt.so.1`, so link the static version.
+    find_compiler_lib_path(LIBCRYPT libcrypt.a)
+    list(APPEND CFG_CMD COMMAND ${ISED} "/^dropbear:/{n$<SEMICOLON>s| -lcrypt | ${LIBCRYPT} |}" Makefile)
+endif()
+
 set(PROGRAMS dbclient dropbear scp)
 
 list(APPEND BUILD_CMD make ${PROGRAMS})
@@ -71,8 +78,8 @@ list(APPEND BUILD_CMD make ${PROGRAMS})
 append_binary_install_command(INSTALL_CMD ${PROGRAMS})
 
 external_project(
-    DOWNLOAD URL bb72335b40c90397cb1c182143524800
-    https://github.com/mkj/dropbear/archive/refs/tags/DROPBEAR_2024.86.tar.gz
+    DOWNLOAD URL 26c3e2ea61a8f3bc5b19c78e697ec42c
+    https://github.com/mkj/dropbear/archive/refs/tags/DROPBEAR_2026.92.tar.gz
     PATCH_FILES ${PATCH_FILES}
     CONFIGURE_COMMAND ${CFG_CMD}
     BUILD_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/localoptions.h

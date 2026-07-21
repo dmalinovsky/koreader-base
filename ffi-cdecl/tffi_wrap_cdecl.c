@@ -1,15 +1,12 @@
 #include "http-parser/http_parser.h"
 #include "turbo_ffi_wrap.h"
 
-#include "ffi-cdecl.h"
-
 cdecl_func(http_body_is_final)
 cdecl_func(http_errno_description)
 cdecl_func(http_errno_name)
 cdecl_func(http_method_str)
 cdecl_func(http_parser_execute)
 cdecl_func(http_parser_init)
-cdecl_func(http_parser_parse_url)
 cdecl_func(http_parser_parse_url)
 cdecl_func(http_parser_pause)
 cdecl_func(http_parser_settings_init)

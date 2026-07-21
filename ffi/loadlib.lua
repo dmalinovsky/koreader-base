@@ -18,12 +18,15 @@ ABI compatibility).
 
 local ffi = require("ffi")
 local android = ffi.os == "Linux" and os.getenv("IS_ANDROID") and require("android")
-local log = android and android.LOGI or print
+-- NOTE: the `ffi.log` override is used by some tools to silence loadlib's traces.
+local log = ffi.log or android and android.LOGI or print
 
 local monolibtic = {
     path = (android and android.nativeLibraryDir or "libs") .. "/libkoreader-monolibtic." .. (ffi.os == "OSX" and "dylib" or "so"),
     redirects = {
+        ["archive"]    = true,
         ["blitbuffer"] = true,
+        ["crypto"]     = true,
         ["czmq"]       = true,
         ["freetype"]   = true,
         ["fribidi"]    = true,
@@ -37,6 +40,7 @@ local monolibtic = {
         ["png16"]      = true,
         ["sharpyuv"]   = true,
         ["sqlite3"]    = true,
+        ["ssl"]        = true,
         ["tffi_wrap"]  = true,
         ["turbojpeg"]  = true,
         ["unibreak"]   = true,
@@ -44,6 +48,7 @@ local monolibtic = {
         ["webp"]       = true,
         ["webpdemux"]  = true,
         ["wrap-mupdf"] = true,
+        ["xxhash"]     = true,
         ["z"]          = true,
         ["zmq"]        = true,
         ["zstd"]       = true,

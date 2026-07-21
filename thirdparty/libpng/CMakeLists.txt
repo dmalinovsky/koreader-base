@@ -1,15 +1,17 @@
-list(APPEND PATCH_FILES math_library.patch)
-
 list(APPEND CMAKE_ARGS
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
     # Project options.
     -DPNG_DEBUG_POSTFIX=
     -DPNG_FRAMEWORK=FALSE
-    -DPNG_TOOLS=FALSE
+    -DPNG_HARDWARE_OPTIMIZATIONS=$<BOOL:${WANT_SIMD}>
     -DPNG_SHARED=$<NOT:$<BOOL:${MONOLIBTIC}>>
     -DPNG_STATIC=$<BOOL:${MONOLIBTIC}>
     -DPNG_TESTS=FALSE
+    -DPNG_TOOLS=FALSE
 )
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|aarch)")
+    list(APPEND CMAKE_ARGS -DPNG_ARM_NEON=$<IF:$<BOOL:${WANT_SIMD}>,on,off>)
+endif()
 
 list(APPEND BUILD_CMD COMMAND ninja)
 
@@ -20,9 +22,8 @@ if(NOT MONOLIBTIC)
 endif()
 
 external_project(
-    DOWNLOAD URL dabdabca28f211feeba199d93235c703
-    https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.43.tar.gz
-    PATCH_FILES ${PATCH_FILES}
+    DOWNLOAD URL 92972b05f1895240139f749ff24afce8
+    https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.58.tar.gz
     CMAKE_ARGS ${CMAKE_ARGS}
     BUILD_COMMAND ${BUILD_CMD}
     INSTALL_COMMAND ${INSTALL_CMD}

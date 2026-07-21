@@ -292,6 +292,17 @@ static inline void BBRGB32_BLEND_PIXEL_CLAMPED(BlitBuffer * restrict bb, int rot
     }
 }
 
+static inline uint8_t saturate_channel(uint8_t channel, uint8_t gray, double saturation) {
+    double value = (double)gray + (((double)channel - (double)gray) * saturation);
+    if (value <= 0.0) {
+        return 0;
+    }
+    if (value >= 255.0) {
+        return 255;
+    }
+    return (uint8_t)(value + 0.5);
+}
+
 static inline unsigned int BB_GET_WIDTH(BlitBuffer * restrict bb) {
     if ((GET_BB_ROTATION(bb) & 1U) == 0U) {
         return bb->w;
@@ -856,8 +867,8 @@ void BB_blend_RGB32_multiply_rect(BlitBuffer * restrict bb, unsigned int x, unsi
                     ColorRGB16 * restrict dstptr;
                     BB_GET_PIXEL(bb, bb_rotation, ColorRGB16, i, j, &dstptr);
                     const uint8_t dr = ColorRGB16_GetR(dstptr->v);
-                    const uint8_t dg = ColorRGB16_GetR(dstptr->v);
-                    const uint8_t db = ColorRGB16_GetR(dstptr->v);
+                    const uint8_t dg = ColorRGB16_GetG(dstptr->v);
+                    const uint8_t db = ColorRGB16_GetB(dstptr->v);
                     const uint8_t r = (uint8_t) DIV_255(dr * ainv + DIV_255(dr * color->r) * alpha);
                     const uint8_t g = (uint8_t) DIV_255(dg * ainv + DIV_255(dg * color->g) * alpha);
                     const uint8_t b = (uint8_t) DIV_255(db * ainv + DIV_255(db * color->b) * alpha);
@@ -884,6 +895,63 @@ void BB_blend_RGB32_multiply_rect(BlitBuffer * restrict bb, unsigned int x, unsi
                     dstptr->r = (uint8_t) DIV_255(dstptr->r * ainv + DIV_255(dstptr->r * color->r) * alpha);
                     dstptr->g = (uint8_t) DIV_255(dstptr->g * ainv + DIV_255(dstptr->g * color->g) * alpha);
                     dstptr->b = (uint8_t) DIV_255(dstptr->b * ainv + DIV_255(dstptr->b * color->b) * alpha);
+                }
+            }
+            break;
+    }
+}
+
+void BB_saturate_rect(BlitBuffer * restrict bb, unsigned int x, unsigned int y, unsigned int w, unsigned int h, double saturation) {
+    const int bb_type = GET_BB_TYPE(bb);
+    const int bb_rotation = GET_BB_ROTATION(bb);
+
+    if (saturation == 1.0 || w == 0 || h == 0) {
+        return;
+    }
+
+    saturation = MAX(0.0, MIN(saturation, 2.0));
+
+    switch (bb_type) {
+        case TYPE_BB8:
+        case TYPE_BB8A:
+            return;
+        case TYPE_BBRGB16:
+            for (unsigned int j = y; j < y + h; j++) {
+                for (unsigned int i = x; i < x + w; i++) {
+                    ColorRGB16 * restrict dstptr;
+                    BB_GET_PIXEL(bb, bb_rotation, ColorRGB16, i, j, &dstptr);
+                    const uint8_t r = ColorRGB16_GetR(dstptr->v);
+                    const uint8_t g = ColorRGB16_GetG(dstptr->v);
+                    const uint8_t b = ColorRGB16_GetB(dstptr->v);
+                    const uint8_t gray = (uint8_t) RGB_To_A(r, g, b);
+                    const uint8_t sr = saturate_channel(r, gray, saturation);
+                    const uint8_t sg = saturate_channel(g, gray, saturation);
+                    const uint8_t sb = saturate_channel(b, gray, saturation);
+                    dstptr->v = (uint16_t) RGB_To_RGB16(sr, sg, sb);
+                }
+            }
+            break;
+        case TYPE_BBRGB24:
+            for (unsigned int j = y; j < y + h; j++) {
+                for (unsigned int i = x; i < x + w; i++) {
+                    ColorRGB24 * restrict dstptr;
+                    BB_GET_PIXEL(bb, bb_rotation, ColorRGB24, i, j, &dstptr);
+                    const uint8_t gray = (uint8_t) RGB_To_A(dstptr->r, dstptr->g, dstptr->b);
+                    dstptr->r = saturate_channel(dstptr->r, gray, saturation);
+                    dstptr->g = saturate_channel(dstptr->g, gray, saturation);
+                    dstptr->b = saturate_channel(dstptr->b, gray, saturation);
+                }
+            }
+            break;
+        case TYPE_BBRGB32:
+            for (unsigned int j = y; j < y + h; j++) {
+                for (unsigned int i = x; i < x + w; i++) {
+                    ColorRGB32 * restrict dstptr;
+                    BB_GET_PIXEL(bb, bb_rotation, ColorRGB32, i, j, &dstptr);
+                    const uint8_t gray = (uint8_t) RGB_To_A(dstptr->r, dstptr->g, dstptr->b);
+                    dstptr->r = saturate_channel(dstptr->r, gray, saturation);
+                    dstptr->g = saturate_channel(dstptr->g, gray, saturation);
+                    dstptr->b = saturate_channel(dstptr->b, gray, saturation);
                 }
             }
             break;
@@ -1717,7 +1785,7 @@ void BB_add_blit_from(BlitBuffer * restrict dst, const BlitBuffer * restrict src
         // NOP
         return;
     } else if (alpha == 0xFF) {
-        return BB_blit_to(src, dst, dest_x, dest_y, offs_x, offs_x, w, h);
+        return BB_blit_to(src, dst, dest_x, dest_y, offs_x, offs_y, w, h);
     }
 
     const int dbb_type = GET_BB_TYPE(dst);
@@ -3060,7 +3128,6 @@ void BB_paint_rounded_corner_noAA(BlitBuffer * restrict bb, unsigned int off_x, 
     // r2 ... radius of inner circle; might be zero
     const unsigned int r2 = r - bw;
 
-    int x2 = 0;
     int y2 = r2;
 
     int f2 = 1 - r2;
@@ -3085,7 +3152,6 @@ void BB_paint_rounded_corner_noAA(BlitBuffer * restrict bb, unsigned int off_x, 
                 ddF2_y += 2;
                 f2 += ddF2_y;
             }
-            ++x2;
             ddF2_x += 2;
             f2 += ddF2_x + 1;
         }
@@ -3297,12 +3363,12 @@ void BB_paint_rounded_corner_AA(BlitBuffer * restrict bb, unsigned int off_x, un
 
     int o_diam = 2*r; // outer diameter
     int odd_diam = o_diam&1; // odd diameter
-    int a2 = 2*r-2*bw;
-    int dx = 4*(o_diam-1)*o_diam*o_diam;
-    int dy = 4*(odd_diam-1)*o_diam*o_diam;                // error increment
+    double a2 = 2.0*r-2.0*bw;
+    double dx = 4.0*(o_diam-1)*o_diam*o_diam;
+    double dy = 4.0*(odd_diam-1)*o_diam*o_diam;            // error increment
     int i = o_diam+a2;
-    int err = odd_diam*o_diam*o_diam;
-    int dx2, dy2, e2, ed;
+    double err = odd_diam*o_diam*o_diam;
+    double dx2, dy2, e2, ed;
 
     if ((bw-1)*(2*o_diam-bw) > o_diam*o_diam) {
         a2 = 0;
@@ -3324,9 +3390,8 @@ void BB_paint_rounded_corner_AA(BlitBuffer * restrict bb, unsigned int off_x, un
     e2 = dx2*e2;
     y0 += (o_diam+1)>>1;
     y1 = y0-odd_diam;                              // starting pixel
-    int a1;
-    a1 = 8*o_diam*o_diam;
-    a2 = 8*a2*a2;
+    double a1 = 8.0*o_diam*o_diam;
+    a2 = 8.0*a2*a2;
 
     do {
         for (;;) {
@@ -3334,12 +3399,12 @@ void BB_paint_rounded_corner_AA(BlitBuffer * restrict bb, unsigned int off_x, un
                 i = x0;
                 break;
             }
-            i = MIN(dx,dy);
+            double i = MIN(dx,dy);
             ed = MAX(dx,dy);
 
-            ed += 2*ed*i*i/(4*ed*ed+i*i+1)+1;// approx ed=sqrt(dx*dx+dy*dy)
+            ed += 2.0*ed*i*i/(4.0*ed*ed+i*i+1.0)+1.0; // approx ed=sqrt(dx*dx+dy*dy)
 
-            i = 255*err/ed;                             // outside anti-aliasing
+            i = 255.0*err/ed;                            // outside anti-aliasing
             if (bb_type == TYPE_BB8) {
                 const Color8A color = { .a = c, .alpha = 255-i };
                 BB8_SET_ALL_QUADRANTS(x0, y0, x1, y1);
@@ -3385,12 +3450,12 @@ void BB_paint_rounded_corner_AA(BlitBuffer * restrict bb, unsigned int off_x, un
             }
         }
         while (e2 > 0 && x0+x1 >= 2*bw) {               // inside anti-aliasing
-            i = MIN(dx2,dy2);
+            double i = MIN(dx2,dy2);
             ed = MAX(dx2,dy2);
 
-            ed += 2*ed*i*i/(4*ed*ed+i*i);                 // approximation
+            ed += 2.0*ed*i*i/(4.0*ed*ed+i*i); // approximation
 
-            i = 255-255*e2/ed;             // get intensity value by pixel error
+            i = 255.0-255.0*e2/ed;          // get intensity value by pixel error
             if (bb_type == TYPE_BB8) {
                 const Color8A color = { .a = c, .alpha = 255-i };
                 BB8_SET_ALL_QUADRANTS(bw, y0, x0+x1-bw, y1);
@@ -3430,7 +3495,7 @@ void BB_paint_rounded_corner_AA(BlitBuffer * restrict bb, unsigned int off_x, un
             err -= dy;
         }
         for (; y0-y1 <= o_diam; err += dy += a1) { // too early stop of flat ellipses
-            i = 255*4*err/a1;  // -> finish tip of ellipse
+            i = 255.0*4.0*err/a1;  // -> finish tip of ellipse
             if (bb_type == TYPE_BB8) {
                 const Color8A color = { .a = c, .alpha = 255-i };
                 BB8_SET_ALL_QUADRANTS(x0, y0, x1, y1);

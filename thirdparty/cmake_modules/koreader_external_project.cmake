@@ -1,5 +1,3 @@
-find_package(Git REQUIRED)
-
 # Transform paths in depfiles to be absolute.
 if(POLICY CMP0116)
     cmake_policy(SET CMP0116 NEW)
@@ -15,6 +13,7 @@ set(PRINTF_QS "%q")
 if(CMAKE_HOST_APPLE)
     set(PRINTF_QS "'%s'")
 endif()
+list(JOIN WGET " " WGET_COMMAND)
 set(KOENV ${CMAKE_BINARY_DIR}/koenv.sh)
 configure_file(${CMAKE_CURRENT_LIST_DIR}/koenv.sh ${KOENV} @ONLY)
 file(MD5 ${CMAKE_TOOLCHAIN_FILE} CMAKE_TOOLCHAIN_FILE_MD5)
@@ -206,17 +205,14 @@ function(external_project)
         list(APPEND CMD COMMAND cd ${SOURCE_DIR})
     endif()
     if(DEFINED _PATCH_OVERLAY)
-        get_filename_component(OVERLAY_PATH ${_PATCH_OVERLAY} ABSOLUTE BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-        file(GLOB_RECURSE OVERLAY_FILES ${OVERLAY_PATH}/*)
-        set(OVERLAY_MANIFEST)
-        foreach(F IN LISTS _BEFORE)
-            file(MD5 ${F} MD5)
-            list(APPEND OVERLAY_MANIFEST ${MD5})
-            file(MD5 ${F} MD5)
+        file(GLOB_RECURSE OVERLAY_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${_PATCH_OVERLAY}/*)
+        foreach(F IN LISTS OVERLAY_FILES)
+            get_filename_component(F_PATH ${F} ABSOLUTE BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${F_PATH})
+            file(MD5 ${F_PATH} MD5)
+            list(APPEND TRIGGERS ${F}:${MD5})
         endforeach()
-        string(MD5 MD5 "${OVERLAY_MANIFEST}")
-        list(APPEND TRIGGERS overlay:${MD5})
-        list(APPEND CMD COMMAND ${CMAKE_COMMAND} -E copy_directory ${OVERLAY_PATH} .)
+        list(APPEND CMD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/${_PATCH_OVERLAY} .)
     endif()
     if(DEFINED _PATCH_FILES)
         list(APPEND CMD COMMAND apply_patches)
@@ -262,10 +258,14 @@ function(external_project)
             message(FATAL_ERROR "unsupported: with both CMAKE_ARGS and CONFIGURE_COMMAND")
         endif()
         if(DEFINED _CMAKE_ARGS)
-            list(APPEND CMD COMMAND ${CMAKE_COMMAND} -G Ninja
-                -S ${SOURCE_DIR}/${_SOURCE_SUBDIR}
-                -B ${BINARY_DIR} ${_CMAKE_ARGS}
-            )
+            list(APPEND CMD COMMAND)
+            # NOTE: we disable ccache use during the configure phase,
+            # as shifting source paths (temporary directories) prevent
+            # cache hits anyway.
+            if(CCACHE)
+                list(APPEND CMD env CCACHE_DISABLE=1)
+            endif()
+            list(APPEND CMD ${CMAKE_COMMAND} -G Ninja -S ${SOURCE_DIR}/${_SOURCE_SUBDIR} -B ${BINARY_DIR} ${_CMAKE_ARGS})
         elseif(DEFINED _CONFIGURE_COMMAND)
             list(APPEND CMD COMMAND cd ${BINARY_DIR})
             list(APPEND CMD COMMAND ${_CONFIGURE_COMMAND})
@@ -349,24 +349,33 @@ function(luarocks_external_project URL MD5)
         set(_TREE ${STAGING_DIR})
     endif()
 
-    # Build command.
-    if(DEFINED _ROCKSPEC)
-        # Build in source tree.
-        set(BINARY_DIR ${SOURCE_DIR})
-    endif()
-    list(APPEND BUILD_CMD COMMAND ${STAGING_DIR}/bin/luarocks --tree ${BINARY_DIR}/dist)
     if(URL MATCHES [=[/([a-z0-9_-]+)-(([0-9]+)(\.[0-9]+)*-[0-9]+)\.src\.rock$]=])
         # From source rock (e.g https://luarocks.org/manifests/lunarmodules/say-1.4.1-3.src.rock).
-        set(NAME ${CMAKE_MATCH_1})
-        set(VERSION ${CMAKE_MATCH_2})
-        list(APPEND BUILD_CMD build ${DOWNLOAD_DIR}/${NAME}-${VERSION}.src.rock)
+        if(NOT DEFINED _ROCKSPEC)
+            set(_ROCKSPEC ../${CMAKE_MATCH_1}-${CMAKE_MATCH_2}.rockspec)
+        endif()
+        set(_SOURCE_SUBDIR ${NAME})
     else()
         if(NOT DEFINED _ROCKSPEC)
             message(FATAL_ERROR "missing ROCKSPEC for luarocks project: ${PROJECT_NAME}")
         endif()
-        list(APPEND BUILD_CMD make ${_ROCKSPEC})
+        set(_SOURCE_SUBDIR)
     endif()
-    list(APPEND BUILD_CMD --deps-mode none --force-fast --no-doc --no-manifest)
+
+    # Build in source tree.
+    set(BINARY_DIR ${SOURCE_DIR})
+
+    # Build command.
+    if(_SOURCE_SUBDIR)
+        list(APPEND BUILD_CMD COMMAND cd ${_SOURCE_SUBDIR})
+    endif()
+    # First things first: go back to a pristine source tree…
+    list(APPEND BUILD_CMD COMMAND clean_tree ${SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/source.list)
+    list(APPEND BUILD_CMD COMMAND
+        ${STAGING_DIR}/bin/luarocks
+        --tree ${BINARY_DIR}/dist make ${_ROCKSPEC}
+        --deps-mode none --force-fast --no-doc --no-manifest
+    )
 
     # Install command.
     list(APPEND INSTALL_CMD COMMAND mkdir -p ${SPEC_ROCKS_DIR})

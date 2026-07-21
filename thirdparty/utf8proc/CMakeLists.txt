@@ -12,8 +12,8 @@ if(NOT MONOLIBTIC)
 endif()
 
 external_project(
-    DOWNLOAD URL a4895a4b0940e91bace9afede4f9c76b
-    https://github.com/JuliaStrings/utf8proc/releases/download/v2.9.0/utf8proc-2.9.0.tar.gz
+    DOWNLOAD URL 09773a9a9c4029b1e547fe398e555411
+    https://github.com/JuliaStrings/utf8proc/archive/refs/tags/v2.11.3.tar.gz
     CMAKE_ARGS ${CMAKE_ARGS}
     BUILD_COMMAND ${BUILD_CMD}
     INSTALL_COMMAND ${INSTALL_CMD}

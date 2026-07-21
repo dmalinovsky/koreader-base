@@ -214,6 +214,9 @@ static int setColorRendering(lua_State *L) {
 		doc->pixelsize = 1;
 		doc->pixelformat = ddjvu_format_create(DDJVU_FORMAT_GREY8, 0, NULL);
 	}
+	if (! doc->pixelformat) {
+		return luaL_error(L, "cannot create DjVu pixelformat");
+	}
 	ddjvu_format_set_row_order(doc->pixelformat, 1);
 	ddjvu_format_set_y_direction(doc->pixelformat, 1);
 	return 0;
@@ -649,6 +652,10 @@ static int drawPage(lua_State *L) {
 	if (!ddjvu_page_render(page->page_ref, djvu_render_mode, &pagerect, &renderrect, page->doc->pixelformat, bb->w*page->doc->pixelsize, (void *)imagebuffer)) {
 		// Clear to white on failure
 		memset(imagebuffer, 0xFF, bbsize);
+	}
+
+	if (page->doc->pixelsize == 3 && dc->saturation != 1.0) {
+		BB_saturate_rect(bb, 0, 0, bb->w, bb->h, dc->saturation);
 	}
 
 	return 0;

@@ -4,10 +4,6 @@ set(BINARY_DIR ${SOURCE_DIR})
 list(APPEND PATCH_FILES koreader-luajit-makefile-tweaks.patch)
 # Enable table.pack & table.unpack w/o the rest of the -DLUAJIT_ENABLE_LUA52COMPAT baggage...
 list(APPEND PATCH_FILES koreader-luajit-enable-table_pack.patch)
-if(ANDROID)
-    list(APPEND PATCH_FILES koreader-luajit-mcode-reserve-hack.patch)
-    # list(APPEND PATCH_FILES koreader-luajit-mcode-debug.patch)
-endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     # Debugging is a go!
@@ -28,6 +24,7 @@ endif()
 
 if(EMULATE_READER)
     append_autotools_vars(BUILD_ARGS)
+    list(APPEND BUILD_ARGS TARGET_STRIP=true)
 else()
     assert_var_defined(BASE_CFLAGS)
     assert_var_defined(HOSTCC)
@@ -69,8 +66,7 @@ else()
     elseif(WIN32)
         list(APPEND BUILD_ARGS TARGET_SYS=Windows)
     endif()
-    string(JOIN " " TARGET_STRIP ${STRIP_CMD})
-    list(APPEND BUILD_ARGS TARGET_STRIP=${TARGET_STRIP})
+    list(APPEND BUILD_ARGS TARGET_STRIP=true)
 endif()
 
 if(APPLE)
@@ -99,7 +95,7 @@ endif()
 append_tree_install_commands(INSTALL_CMD src/jit jit)
 
 external_project(
-    DOWNLOAD GIT 97813fb924edf822455f91a5fbbdfdb349e5984f
+    DOWNLOAD GIT 3c4f9fe2052b8d08a917ac0d5f38563f0297b5a3
     https://github.com/LuaJIT/LuaJIT
     PATCH_FILES ${PATCH_FILES}
     PATCH_COMMAND ${PATCH_CMD}

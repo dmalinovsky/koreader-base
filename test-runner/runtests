@@ -35,6 +35,7 @@ if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
     exit 1
 fi
 
+# shellcheck disable=SC2329 # shellcheck 0.11.0 false positive / regression
 run() {
     if [[ "${debug}" -ne 0 ]]; then
         printf '%s\n' "$(printf '%q ' "$@")" 1>&2
@@ -42,6 +43,7 @@ run() {
     "$@"
 }
 
+# shellcheck disable=SC2329 # shellcheck 0.11.0 false positive / regression
 runtests_meson() {
     local rundir="${kodir}/spec/run"
     # Build `meson test …` command.
@@ -79,9 +81,12 @@ runtests_meson() {
     return "${code}"
 }
 
+# shellcheck disable=SC2329 # shellcheck 0.11.0 false positive / regression
 runtests_busted() {
+    local rundir="${kodir}/spec/run"
     local cmd=(
         env -C "${kodir}"
+        KO_HOME="${rundir}"
         # Don't fail the testsuite on ASAN detected leaks.
         LSAN_OPTIONS="exitcode=0${LSAN_OPTIONS:+ }${LSAN_OPTIONS}"
     )
@@ -89,8 +94,8 @@ runtests_busted() {
         '') ;;
         gdb) cmd+=(gdb --args) ;;
         *)
-            # shellcheck disable=SC2206
-            cmd+=(${wrapper})
+            declare -a a="(${wrapper})"
+            cmd+=("${a[@]}")
             ;;
     esac
     cmd+=(./luajit -e 'require "busted.runner" {standalone = false}' /dev/null)
@@ -110,7 +115,7 @@ runtests_busted() {
         -- "$@"
     )
     # Do it.
-    run find -L "${kodir}"/spec/*/unit -name '*.sdr' -exec rm -rf '{}' +
+    run rm -rf "${rundir}"
     run "${cmd[@]}"
 }
 
@@ -118,7 +123,8 @@ kodir="$(cd "$(dirname "$0")/.." && pwd -P)"
 busted_args=(
     --config-file=spec/config.lua
     --exclude-tags=notest
-    --helper=ffi/loadlib.lua
+    --helper=spec/helper.lua
+    --loaders=lua
     --lazy
 )
 debug=0
@@ -128,7 +134,7 @@ suite='all'
 use_meson=1
 wrapper=''
 
-which meson >/dev/null 2>&1 || use_meson=0
+type -P meson >/dev/null || use_meson=0
 
 if ! opt=$(getopt -o "dh${RUNTESTS_GETOPT_SHORT}" --long "debug,help,${RUNTESTS_GETOPT_LONG}" --name "$0" -- "$@"); then
     printf 1>&2 '\nUSAGE: %s <OPTIONS> <TEST_SUITE> <TEST_NAMES>\n%s\n' "${0##*/}" "${RUNTESTS_HELP}"
@@ -217,6 +223,8 @@ case "$1" in
         ;;
 esac
 
+export LUA_CPATH='?.so;common/?.so;spec/rocks/lib/lua/5.1/?.so'
+export LUA_PATH='?.lua;common/?.lua;frontend/?.lua;spec/rocks/share/lua/5.1/?.lua;spec/rocks/share/lua/5.1/?/init.lua'
 export TESSDATA_PREFIX="${kodir}/data"
 
 if [[ "${use_meson}" -ne 0 ]]; then

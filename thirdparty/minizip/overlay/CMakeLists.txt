@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.17.5)
 project(minizip LANGUAGES C)
 
 file(GLOB AES_SRC aes/*.c)

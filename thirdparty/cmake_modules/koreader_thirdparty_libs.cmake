@@ -30,6 +30,9 @@ function(declare_dependency NAME)
     add_library(${NAME} ALIAS ${TGT})
 endfunction()
 
+# android-luajit-launcher
+declare_dependency(android-luajit-launcher::7z MONOLIBTIC 7z LIBRARIES android log)
+
 # crengine
 declare_dependency(crengine::crengine)
 target_link_libraries(
@@ -49,6 +52,7 @@ target_link_libraries(
     md4c::html
     srell::srell
     utf8proc::utf8proc
+    xxhash::xxhash
     zlib::z
     zstd::zstd
 )
@@ -63,14 +67,17 @@ endif()
 declare_dependency(czmq::czmq MONOLIBTIC czmq zmq LIBRARIES ${LIBRARIES})
 
 # djvulibre
-set(LIBRARIES m pthread stdc++)
+set(LIBRARIES m pthread)
+if(NOT (ANDROID AND MONOLIBTIC))
+    list(APPEND LIBRARIES stdc++)
+endif()
 if(APPLE)
     list(APPEND LIBRARIES "-framework CoreFoundation")
 endif()
 declare_dependency(djvulibre::djvulibre MONOLIBTIC jpeg STATIC djvulibre LIBRARIES ${LIBRARIES})
 
 # freetype
-declare_dependency(freetype2::freetype INCLUDES freetype2 MONOLIBTIC freetype)
+declare_dependency(freetype2::freetype INCLUDES freetype2 MONOLIBTIC freetype STATIC brotlicommon brotlidec)
 
 # fribidi
 declare_dependency(fribidi::fribidi INCLUDES fribidi MONOLIBTIC fribidi)
@@ -80,6 +87,17 @@ declare_dependency(giflib::gif MONOLIBTIC gif)
 
 # harfbuzz
 declare_dependency(harfbuzz::harfbuzz INCLUDES freetype2 harfbuzz MONOLIBTIC harfbuzz)
+
+# inkview
+declare_dependency(inkview::inkview_517)
+target_include_directories(_inkview__inkview_517 INTERFACE ${INKVIEW_DIR}/517)
+target_link_libraries(_inkview__inkview_517 INTERFACE ${INKVIEW_DIR}/517/libinkview.so)
+
+# koreader-lfs
+declare_dependency(koreader-lfs::koreader-lfs MONOLIBTIC koreader-lfs)
+
+# libarchive
+declare_dependency(libarchive::libarchive MONOLIBTIC archive)
 
 # leptonica
 declare_dependency(leptonica::leptonica INCLUDES leptonica MONOLIBTIC leptonica)
@@ -100,6 +118,20 @@ declare_dependency(libk2pdfopt::k2pdfopt INCLUDES k2pdfopt leptonica MONOLIBTIC 
 
 # libpng
 declare_dependency(libpng::png16 MONOLIBTIC png16)
+
+# libressl
+set(CRYPTO_LIBS)
+set(SSL_LIBS)
+if(MONOLIBTIC)
+    list(APPEND CRYPTO_LIBS pthread)
+    list(APPEND SSL_LIBS pthread)
+    if(NOT ANDROID)
+        list(APPEND CRYPTO_LIBS rt)
+        list(APPEND SSL_LIBS rt)
+    endif()
+endif()
+declare_dependency(libressl::crypto MONOLIBTIC crypto LIBRARIES ${CRYPTO_LIBS})
+declare_dependency(libressl::ssl MONOLIBTIC ssl LIBRARIES ${SSL_LIBS})
 
 # libunibreak
 declare_dependency(libunibreak::unibreak MONOLIBTIC unibreak)
@@ -159,31 +191,26 @@ declare_dependency(lunasvg::lunasvg MONOLIBTIC lunasvg)
 declare_dependency(md4c::html STATIC md4c-html md4c)
 
 # mupdf
-set(LIBRARIES m)
+set(STATIC_LIBS mupdf mupdf-third aes)
+set(SYS_LIBS m)
 if(ANDROID)
-    list(APPEND LIBRARIES log)
+    list(APPEND SYS_LIBS log)
+endif()
+set(MONO_LIBS archive freetype harfbuzz jpeg webp webpdemux z)
+if(ANDROID)
+    list(APPEND STATIC_LIBS lzma)
 endif()
 declare_dependency(
     mupdf::mupdf
-    MONOLIBTIC freetype harfbuzz jpeg webp webpdemux z
-    STATIC mupdf mupdf-third aes
-    LIBRARIES ${LIBRARIES}
+    MONOLIBTIC ${MONO_LIBS}
+    STATIC ${STATIC_LIBS}
+    LIBRARIES ${SYS_LIBS}
 )
 
 # openlipclua
 if(MONOLIBTIC)
     declare_dependency(openlipclua::libopenlipclua SHARED lipc STATIC openlipclua)
 endif()
-
-# openssl
-set(CRYPTO_LIBS)
-set(SSL_LIBS)
-if(MONOLIBTIC)
-    list(APPEND CRYPTO_LIBS dl pthread)
-    list(APPEND SSL_LIBS pthread)
-endif()
-declare_dependency(openssl::crypto MONOLIBTIC crypto LIBRARIES ${CRYPTO_LIBS})
-declare_dependency(openssl::ssl MONOLIBTIC ssl LIBRARIES ${SSL_LIBS})
 
 # nanosvg
 declare_dependency(nanosvg::nanosvg LIBRARIES m)
@@ -215,6 +242,9 @@ endif()
 
 # utf8proc
 declare_dependency(utf8proc::utf8proc MONOLIBTIC utf8proc)
+
+# xxhash
+declare_dependency(xxhash::xxhash MONOLIBTIC xxhash)
 
 # zlib
 declare_dependency(zlib::z MONOLIBTIC z)
