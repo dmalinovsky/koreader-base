@@ -17,6 +17,10 @@ end
 local function _adjustAreaColours(fb)
     if fb.device.hasColorScreen() then
         fb.debug("adjusting image color saturation")
+        -- inkview.adjustAreaDefault updates buffer in-place, with additional refreshes mangling content.
+        -- We need to restore the original buffer to make sure it won't be adjusted twice.
+        fb:saveCurrentBB()
+        -- Make sure to call fb:restoreFromSavedBB() after calling inkview.*Update*
 
         inkview.adjustAreaDefault(fb.data, fb._finfo.line_length, fb._vinfo.width, fb._vinfo.height)
     end
@@ -30,9 +34,6 @@ local function _updatePartial(fb, x, y, w, h, dither, hq)
 
     if fb.device.hasColorScreen() then
         if dither then
-            -- inkview.adjustAreaDefault updates buffer in-place, with additional refreshes mangling content.
-            -- We need to restore the original buffer to make sure it won't be adjusted twice.
-            fb:saveCurrentBB()
             _adjustAreaColours(fb)
         end
         if hq then
@@ -55,7 +56,6 @@ local function _updateFull(fb, x, y, w, h, dither)
 
     if fb.device.hasColorScreen() then
         if dither then
-            fb:saveCurrentBB()
             _adjustAreaColours(fb)
         end
         inkview.FullUpdateHQ()
@@ -75,7 +75,6 @@ local function _updateFast(fb, x, y, w, h, dither)
     fb.debug("refresh: inkview fast", x, y, w, h, dither)
 
     if fb.device.hasColorScreen() and dither then
-        fb:saveCurrentBB()
         _adjustAreaColours(fb)
     end
 
