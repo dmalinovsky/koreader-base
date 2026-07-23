@@ -36,8 +36,8 @@ local function _updatePartial(fb, x, y, w, h, dither, hq)
         if dither then
             _adjustAreaColours(fb)
         end
-        if not hq and w * h > fb.hq_update_threshold then
-            -- If we need to update at least half of the screen, use HQ update anyway.
+        if not hq and w * h > 1000 then
+            -- If we need to update a large enough region, use HQ update anyway.
             hq = true
         end
         
@@ -120,9 +120,6 @@ function framebuffer:init()
     self.screen_size = self:getRawSize()
     self.native_rotation_mode = self.forced_rotation and self.forced_rotation.default or self.DEVICE_ROTATED_UPRIGHT
     self.cur_rotation_mode = self.native_rotation_mode
-    -- Area of the half of the buffer.
-    self.hq_update_threshold = pb_fb.width * pb_fb.height / 2
-
 
     self.debug("FB info (post fixup)", {
         fb_size = self.fb_size,
