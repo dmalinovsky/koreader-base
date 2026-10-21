@@ -170,7 +170,7 @@ local P_Color4L = ffi.typeof("Color4L*")
 local P_Color8 = ffi.typeof("Color8*") -- luacheck: ignore 211
 local P_Color8A = ffi.typeof("Color8A*") -- luacheck: ignore 211
 local P_ColorRGB16 = ffi.typeof("ColorRGB16*") -- luacheck: ignore 211
-local P_ColorRGB24 = ffi.typeof("ColorRGB24*") -- luacheck: ignore 211
+local P_ColorRGB24 = ffi.typeof("ColorRGB24*")
 local P_ColorRGB32 = ffi.typeof("ColorRGB32*") -- luacheck: ignore 211
 
 -- blitbuffer struct types (pointers)
@@ -828,6 +828,9 @@ end
 function BB_mt.__index:getPixelP(x, y)
     --self:checkCoordinates(x, y)
     return ffi.cast(self.data, ffi.cast(uint8pt, self.data) + self.stride*y) + x
+end
+function BBRGB24_mt.__index:getPixelP(x, y)
+    return ffi.cast(P_ColorRGB24, ffi.cast(uint8pt, self.data) + self.stride*y) + x
 end
 function BB4_mt.__index:getPixelP(x, y)
     --self:checkCoordinates(x, y)
