@@ -42,9 +42,15 @@ end
 local function _shouldUseColorRefresh(fb, px, py, pw, ph)
     local bb = fb.full_bb or fb.bb
     local rect_has_color = _hasColorInPhysicalRect(bb, px, py, pw, ph)
+    local is_page_sized = (pw * ph) >= (bb.w * bb.h * 0.5)
 
     local use_color = fb.panel_has_color or rect_has_color
-    fb.panel_has_color = rect_has_color
+    
+    if is_page_sized then
+        fb.panel_has_color = rect_has_color
+    elseif rect_has_color then
+        fb.panel_has_color = true
+    end
 
     return use_color, rect_has_color
 end
