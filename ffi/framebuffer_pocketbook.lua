@@ -4,14 +4,49 @@ local inkview = ffi.load("inkview")
 
 require("ffi/linux_fb_h")
 
-local framebuffer = {
+local uint8pt_rodata = ffi.typeof("const uint8_t*")
 
+local framebuffer = {
+    panel_has_color = true,
 }
 
 local function _getPhysicalRect(fb, x, y, w, h)
     local bb = fb.full_bb or fb.bb
     x, y, w, h = bb:getBoundedRect(x, y, w, h)
     return bb:getPhysicalRect(x, y, w, h)
+end
+
+local function _hasColorInPhysicalRect(bb, px, py, pw, ph)
+    if not bb or pw <= 0 or ph <= 0 then
+        return false
+    end
+    local bpp = bb:getBytesPerPixel()
+    if bpp == 3 or bpp == 4 then
+        local base = ffi.cast(uint8pt_rodata, bb.data)
+        local stride = tonumber(bb.stride)
+        local offset_x = px * bpp
+        for y = py, py + ph - 1 do
+            local p = base + y * stride + offset_x
+            for _ = 1, pw do
+                local r = p[0]
+                if r ~= p[1] or r ~= p[2] then
+                    return true
+                end
+                p = p + bpp
+            end
+        end
+    end
+    return false
+end
+
+local function _shouldUseColorRefresh(fb, px, py, pw, ph)
+    local bb = fb.full_bb or fb.bb
+    local rect_has_color = _hasColorInPhysicalRect(bb, px, py, pw, ph)
+
+    local use_color = fb.panel_has_color or rect_has_color
+    fb.panel_has_color = rect_has_color
+
+    return use_color, rect_has_color
 end
 
 local function _adjustAreaColours(fb)
@@ -29,19 +64,25 @@ local function _updatePartial(fb, x, y, w, h, dither, hq)
     fb.debug("refresh: inkview partial", x, y, w, h, dither, hq)
 
     if fb.device.hasColorScreen() then
-        if dither then
-            -- inkview.adjustAreaDefault updates buffer in-place, with additional refreshes mangling content.
-            -- We need to restore the original buffer to make sure it won't be adjusted twice.
-            fb:saveCurrentBB()
-            _adjustAreaColours(fb)
-        end
-        if hq then
-            inkview.PartialUpdateHQ(x, y, w, h)
+        local use_color, rect_has_color = _shouldUseColorRefresh(fb, x, y, w, h)
+        if use_color then
+            dither = dither and rect_has_color
+            if dither then
+                -- inkview.adjustAreaDefault updates buffer in-place, with additional refreshes mangling content.
+                -- We need to restore the original buffer to make sure it won't be adjusted twice.
+                fb:saveCurrentBB()
+                _adjustAreaColours(fb)
+            end
+            if hq then
+                inkview.PartialUpdateHQ(x, y, w, h)
+            else
+                inkview.PartialUpdate(x, y, w, h)
+            end
+            if dither then
+                fb:restoreFromSavedBB()
+            end
         else
-            inkview.PartialUpdate(x, y, w, h)
-        end
-        if dither then
-            fb:restoreFromSavedBB()
+            inkview.PartialUpdateBW(x, y, w, h)
         end
 
         return
@@ -54,13 +95,20 @@ local function _updateFull(fb, x, y, w, h, dither)
     fb.debug("refresh: inkview full", x, y, w, h, dither)
 
     if fb.device.hasColorScreen() then
-        if dither then
-            fb:saveCurrentBB()
-            _adjustAreaColours(fb)
-        end
-        inkview.FullUpdateHQ()
-        if dither then
-            fb:restoreFromSavedBB()
+        local bb = fb.full_bb or fb.bb
+        local use_color, rect_has_color = _shouldUseColorRefresh(fb, 0, 0, bb.w, bb.h)
+        if use_color then
+            dither = dither and rect_has_color
+            if dither then
+                fb:saveCurrentBB()
+                _adjustAreaColours(fb)
+            end
+            inkview.FullUpdateHQ()
+            if dither then
+                fb:restoreFromSavedBB()
+            end
+        else
+            inkview.FullUpdate()
         end
 
         return
@@ -74,14 +122,21 @@ local function _updateFast(fb, x, y, w, h, dither)
 
     fb.debug("refresh: inkview fast", x, y, w, h, dither)
 
-    if fb.device.hasColorScreen() and dither then
+    if fb.device.hasColorScreen() then
+        local _, rect_has_color = _shouldUseColorRefresh(fb, x, y, w, h)
+        dither = dither and rect_has_color
+    else
+        dither = false
+    end
+
+    if dither then
         fb:saveCurrentBB()
         _adjustAreaColours(fb)
     end
 
     inkview.DynamicUpdate(x, y, w, h)
 
-    if fb.device.hasColorScreen() and dither then
+    if dither then
         fb:restoreFromSavedBB()
     end
 end
